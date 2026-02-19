@@ -1,4 +1,4 @@
-import {AbsoluteFill, Sequence, interpolate, useCurrentFrame} from 'remotion';
+import {AbsoluteFill, Sequence, interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
 import './load-fonts';
 import {fontFamily, fontPresets} from './load-fonts';
 
@@ -15,6 +15,7 @@ const weightLabels: Record<number, string> = {
 
 const WeightShowcase: React.FC = () => {
 	const frame = useCurrentFrame();
+	const {fps} = useVideoConfig();
 
 	return (
 		<AbsoluteFill
@@ -37,12 +38,12 @@ const WeightShowcase: React.FC = () => {
 				Open Sauce Sans — All Weights
 			</div>
 			{weights.map((weight, i) => {
-				const delay = i * 5;
-				const opacity = interpolate(frame - delay, [0, 15], [0, 1], {
+				const delay = i * Math.round(fps / 6);
+				const opacity = interpolate(frame - delay, [0, Math.round(0.5 * fps)], [0, 1], {
 					extrapolateRight: 'clamp',
 					extrapolateLeft: 'clamp',
 				});
-				const x = interpolate(frame - delay, [0, 15], [30, 0], {
+				const x = interpolate(frame - delay, [0, Math.round(0.5 * fps)], [30, 0], {
 					extrapolateRight: 'clamp',
 					extrapolateLeft: 'clamp',
 				});
@@ -71,7 +72,7 @@ const WeightShowcase: React.FC = () => {
 					fontSize: 42,
 					color: '#aaaaaa',
 					marginTop: 24,
-					opacity: interpolate(frame - 40, [0, 15], [0, 1], {
+					opacity: interpolate(frame - Math.round(1.33 * fps), [0, Math.round(0.5 * fps)], [0, 1], {
 						extrapolateRight: 'clamp',
 						extrapolateLeft: 'clamp',
 					}),
@@ -85,6 +86,7 @@ const WeightShowcase: React.FC = () => {
 
 const SpacingShowcase: React.FC = () => {
 	const frame = useCurrentFrame();
+	const {fps} = useVideoConfig();
 
 	const presetEntries = [
 		{name: 'Normal', preset: fontPresets.normal},
@@ -112,8 +114,8 @@ const SpacingShowcase: React.FC = () => {
 				Open Sauce Sans — Spacing Presets
 			</div>
 			{presetEntries.map(({name, preset}, i) => {
-				const delay = i * 10;
-				const opacity = interpolate(frame - delay, [0, 15], [0, 1], {
+				const delay = i * Math.round(fps / 3);
+				const opacity = interpolate(frame - delay, [0, Math.round(0.5 * fps)], [0, 1], {
 					extrapolateRight: 'clamp',
 					extrapolateLeft: 'clamp',
 				});
@@ -160,12 +162,14 @@ const SpacingShowcase: React.FC = () => {
 };
 
 export const FontTest: React.FC = () => {
+	const {fps} = useVideoConfig();
+
 	return (
 		<>
-			<Sequence durationInFrames={90}>
+			<Sequence durationInFrames={3 * fps}>
 				<WeightShowcase />
 			</Sequence>
-			<Sequence from={90} durationInFrames={90}>
+			<Sequence from={3 * fps} durationInFrames={3 * fps}>
 				<SpacingShowcase />
 			</Sequence>
 		</>

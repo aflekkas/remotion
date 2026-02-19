@@ -45,7 +45,7 @@ bunx remotion still src/index.ts <CompositionId> out/<name>.png --frame=<N>  # R
 
 ## Skills Usage
 
-Before writing any non-trivial Remotion code, read the relevant rule files from `.claude/skills/remotion-best-practices/rules/`. Consult `.claude/skills/remotion-best-practices/SKILL.md` for which file covers which topic. Always read the rule file AND query the `mcp__remotion-documentation__remotion-documentation` tool for the APIs involved.
+Before writing any non-trivial Remotion code, read the relevant rule files from `.claude/skills/remotion-best-practices/rules/`. Consult `.claude/skills/remotion-best-practices/SKILL.md` for which file covers which topic. Use rule files for patterns and gotchas; use the `mcp__remotion-documentation__remotion-documentation` MCP tool for quick API lookups (imports, signatures, props).
 
 Key mappings:
 - Animations/motion → `rules/animations.md`, `rules/timing.md`
@@ -76,344 +76,53 @@ These are hard rules from the official Remotion skills. Violating them causes re
 
 ---
 
-## Custom Subagent Definitions
+## Subagents (`.claude/agents/`)
 
-Each subagent below is a specialized role with a specific prompt template, Remotion domain knowledge, and defined responsibilities. Spawn them via the `Task` tool using the indicated `subagent_type` and the prompt template.
+Custom agents are defined as markdown files in `.claude/agents/`. Claude Code auto-discovers them via `/agents`.
 
----
-
-### 1. Remotion API Researcher
-
-> **subagent_type:** `general-purpose`
-> **When to use:** Before writing ANY non-trivial Remotion code. Always spawn this first.
-
-**Prompt template:**
-```
-You are a Remotion API researcher. Your job is to look up the exact APIs needed for a task using the `mcp__remotion-documentation__remotion-documentation` MCP tool.
-
-TASK: [describe what the composition needs to do]
-
-For each API the task requires, query the Remotion docs and return:
-1. Exact import statement (package + named exports)
-2. Function/component signature with all relevant props/options
-3. A minimal usage example
-4. Gotchas or common mistakes
-
-Query these topics as needed:
-- Layout/timing: "Sequence", "Series", "TransitionSeries", "AbsoluteFill", "Loop", "Freeze"
-- Animation: "interpolate", "spring", "interpolateColors", "Easing", "measureSpring"
-- Media: "Audio", "OffthreadVideo", "Img", "staticFile"
-- Text: "@remotion/google-fonts", "@remotion/layout-utils", "fitText", "measureText"
-- Shapes: "@remotion/shapes", "@remotion/paths", "evolvePath"
-- Noise: "@remotion/noise"
-- Transitions: "@remotion/transitions", "fade", "slide", "wipe", "flip", "clockWipe"
-- Config: "calculateMetadata", "Composition props"
-- Rendering: "renderMedia", "selectComposition", "bundle"
-
-Do NOT guess at APIs. Only return information confirmed by the documentation.
-Return a structured reference the main agent can use to write correct code.
-```
-
-**Returns:** A structured API reference with imports, signatures, examples, and gotchas for every Remotion API the task needs.
-
----
-
-### 2. Composition Architect
-
-> **subagent_type:** `general-purpose`
-> **When to use:** When designing a new composition or restructuring an existing one. Especially for multi-scene videos.
-
-**Prompt template:**
-```
-You are a Remotion composition architect. Your job is to design the structure of a video composition.
-
-TASK: [describe the video to build]
-
-First, read all existing compositions in src/ to understand current patterns and code style.
-Then use `mcp__remotion-documentation__remotion-documentation` to look up any structural APIs you need (Sequence, Series, TransitionSeries, calculateMetadata).
-
-Design and return:
-1. **Scene breakdown** — List every scene/segment with its purpose and duration in frames (at 30fps unless specified otherwise).
-2. **Scene graph** — The nesting structure using Remotion primitives:
-   - `<Series>` for sequential scenes
-   - `<Sequence from={N} durationInFrames={N}>` for timed overlays/layers
-   - `<TransitionSeries>` with specific transition types if scenes need transitions
-3. **Props interface** — TypeScript type for the composition's props, with sensible defaults.
-4. **Composition registration** — The exact `<Composition>` JSX to add to Root.tsx (id, dimensions, fps, durationInFrames, defaultProps).
-5. **Sub-components** — If the composition is complex, list which pieces should be separate components in their own files vs inline.
-6. **Asset requirements** — Any fonts, images, audio, or video files needed in public/.
-7. **Total duration calculation** — Show the math: sum of scene durations minus transition overlaps.
-
-Frame math reference:
-- 30fps: 1s = 30 frames, 5s = 150 frames, 10s = 300 frames
-- 60fps: 1s = 60 frames, 5s = 300 frames, 10s = 600 frames
-- TransitionSeries total = sum(sequence durations) - sum(transition durations)
-```
-
-**Returns:** A complete architectural blueprint: scene breakdown, scene graph, props interface, and registration JSX.
-
----
-
-### 3. Animation Designer
-
-> **subagent_type:** `general-purpose`
-> **When to use:** When a composition needs complex or polished motion design — entrance animations, physics-based motion, path animations, choreographed sequences.
-
-**Prompt template:**
-```
-You are a Remotion animation designer. Your job is to design animation code for specific visual effects.
-
-TASK: [describe the animation/motion needed]
-
-Use `mcp__remotion-documentation__remotion-documentation` to look up the animation APIs you need.
-
-Core Remotion animation APIs:
-- `spring({ frame, fps, config: { mass, damping, stiffness, overshootClamping }, from, to, delay })` — physics-based easing
-- `interpolate(value, inputRange, outputRange, { extrapolateLeft, extrapolateRight, easing })` — value mapping (ALWAYS clamp unless you need extrapolation)
-- `interpolateColors(value, inputRange, colorRange)` — color blending
-- `Easing.bezier(x1,y1,x2,y2)`, `Easing.inOut(Easing.cubic)`, etc. — easing curves
-- `evolvePath(progress, path)` — stroke drawing animation → returns { strokeDasharray, strokeDashoffset }
-- `interpolatePath(value, pathA, pathB)` — morph between SVG paths
-- `noise2D(seed, x, y)` — organic motion (-1 to 1)
-
-For each animation, return:
-1. The exact code (using useCurrentFrame, useVideoConfig)
-2. The frame ranges and what happens in each range
-3. CSS properties being animated (opacity, transform, color, etc.)
-4. Any spring configs with rationale (e.g., damping:200 = no bounce, damping:10 = bouncy)
-
-Common animation patterns to consider:
-- Fade in: interpolate(frame, [0, 30], [0, 1], { extrapolateRight: "clamp" })
-- Scale entrance: spring({ frame, fps, config: { damping: 200 } })
-- Slide in from left: interpolate(frame, [0, 20], [-100, 0], { extrapolateRight: "clamp" }) as translateX
-- Staggered entrance: spring({ frame: frame - delay, fps, ... }) with different delays per item
-- Typewriter: text.slice(0, Math.floor(interpolate(frame, [0, duration], [0, text.length])))
-- Draw-on SVG: evolvePath(progress, pathString) applied to strokeDasharray/strokeDashoffset
-- Color pulse: interpolateColors(frame, [0, 15, 30], ["#fff", "#ff0", "#fff"])
-
-Return production-ready code snippets, not pseudocode.
-```
-
-**Returns:** Complete animation code with frame ranges, spring configs, and CSS property mappings.
-
----
-
-### 4. Media & Asset Agent
-
-> **subagent_type:** `general-purpose`
-> **When to use:** When a composition needs fonts, images, audio, video, or shapes.
-
-**Prompt template:**
-```
-You are a Remotion media and asset specialist. Your job is to set up media elements for a composition.
-
-TASK: [describe media needs — fonts, images, audio, video, shapes]
-
-Use `mcp__remotion-documentation__remotion-documentation` to look up the exact APIs.
-
-Handle these asset types:
-
-**Fonts:**
-- `import { loadFont } from "@remotion/google-fonts/<FontName>"` (PascalCase, no spaces)
-- `const { fontFamily } = loadFont()` — returns CSS font-family string
-- Must call `loadFont()` at module level or component top level
-- For @remotion/layout-utils measurements, MUST await `loadFont().waitUntilDone()` first
-
-**Images:**
-- ALWAYS use `<Img>` from "remotion", never native `<img>` (prevents render flicker)
-- `<Img src={staticFile("logo.png")} />` — files go in public/ folder
-- `staticFile("name")` — resolves public/ folder paths. Do NOT use raw "/name.png" strings
-
-**Audio:**
-- `<Audio src={staticFile("music.mp3")} volume={0.5} />` from "remotion"
-- Volume can be a function: `volume={(f) => interpolate(f, [0,30], [0,1], {extrapolateLeft:"clamp"})}`
-- Multiple `<Audio>` tags mix together
-
-**Video:**
-- `<OffthreadVideo src={staticFile("clip.mp4")} />` — preferred for rendering (frame-accurate)
-- Use inside `<Sequence>` for timing control
-
-**Shapes:**
-- `import { Circle, Rect, Triangle, Star, Polygon, Pie } from "@remotion/shapes"`
-- Each has a `make*()` function that returns `{ path, width, height }` for SVG use
-- Animate with strokeDasharray/strokeDashoffset from evolvePath()
-
-**Noise:**
-- `import { noise2D, noise3D } from "@remotion/noise"`
-- Returns -1 to 1. Use `frame * 0.01` for smooth organic movement
-
-Check which packages are installed. If a needed package is missing, note it and provide the install command: `bun add @remotion/<package>@4.0.399`
-
-Return:
-1. Required package installs (if any)
-2. Import statements
-3. Asset setup code (font loading, static file references)
-4. Component JSX for each media element
-5. Any public/ folder files the user needs to provide
-```
-
-**Returns:** Complete media setup code — imports, font loading, component JSX — plus any missing package install commands and required asset files.
-
----
-
-### 5. Render Agent
-
-> **subagent_type:** `Bash`
-> **When to use:** After writing/editing a composition. ALWAYS run in background.
-> **MUST use `run_in_background: true`**
-
-**Prompt template:**
-```
-Render the Remotion composition. Run this command:
-
-bunx remotion render src/index.ts <CompositionId> out/<filename>.mp4
-
-If this is a still/preview frame instead:
-
-bunx remotion still src/index.ts <CompositionId> out/<filename>.png --frame=<N>
-```
-
-**Rules:**
-- ALWAYS set `run_in_background: true` — renders are slow and must not block conversation.
-- After spawning, continue working. Check output later via `TaskOutput`.
-- For quick visual checks, render a still at a key frame instead of the full video.
-- Only render ONE video at a time per agent (Remotion uses max resources per render).
-- For multiple compositions, spawn multiple background Render Agents in parallel.
-
----
-
-### 6. Render Debugger
-
-> **subagent_type:** `general-purpose`
-> **When to use:** When a render fails or produces unexpected output.
-
-**Prompt template:**
-```
-You are a Remotion render debugger. A render has failed or produced unexpected output.
-
-ERROR/ISSUE: [paste error message or describe the problem]
-COMPOSITION: [composition id and file path]
-
-Steps:
-1. Read the composition source code to understand what it does.
-2. Use `mcp__remotion-documentation__remotion-documentation` to search for:
-   - The specific error message
-   - Any APIs being used incorrectly
-   - Known issues with the failing pattern
-3. Check for these common Remotion mistakes:
-   - Missing `extrapolateRight: "clamp"` on interpolate (values shoot past target)
-   - Using native <img> instead of Remotion <Img> (causes render flicker/blank frames)
-   - Using raw "/file.png" instead of staticFile("file.png")
-   - Font not loaded before measureText/fitText call
-   - Missing package: @remotion/transitions, @remotion/shapes, etc. not installed
-   - Infinite composition duration without calculateMetadata
-   - inputProps not passed to BOTH selectComposition() and renderMedia()
-   - Using <Video> instead of <OffthreadVideo> (frame accuracy issues in renders)
-   - Non-serializable props (functions, class instances) in defaultProps
-   - delayRender timeout (async operation not calling continueRender)
-4. Return:
-   - Root cause diagnosis
-   - Exact fix (code diff)
-   - The corrected code
-```
-
-**Returns:** Root cause, fix, and corrected code.
-
----
-
-### 7. Package Installer
-
-> **subagent_type:** `Bash`
-> **When to use:** When a composition needs Remotion packages that aren't installed yet.
-
-**Prompt template:**
-```
-Install the required Remotion packages. All @remotion/* packages must match version 4.0.399.
-
-bun add <package-list>
-
-Common packages:
-- bun add @remotion/transitions@4.0.399        # TransitionSeries, fade, slide, wipe
-- bun add @remotion/google-fonts@4.0.399       # Google Fonts loader
-- bun add @remotion/shapes@4.0.399             # Shape primitives (Rect, Circle, etc.)
-- bun add @remotion/paths@4.0.399              # SVG path animation (evolvePath, interpolatePath)
-- bun add @remotion/noise@4.0.399              # Noise functions (noise2D, noise3D)
-- bun add @remotion/layout-utils@4.0.399       # Text measurement (measureText, fitText)
-- bun add @remotion/media-utils@4.0.399        # Media duration/metadata
-- bun add @remotion/gif@4.0.399                # GIF support
-- bun add @remotion/three@4.0.399              # Three.js integration
-- bun add @remotion/lottie@4.0.399             # Lottie animation support
-- bun add @remotion/player@4.0.399             # Embeddable React player
-```
+| Agent | Model | When to use |
+|---|---|---|
+| **composition-designer** | sonnet | Building or modifying compositions — researches APIs, designs structure, writes code, sets up media, installs packages |
+| **render-debugger** | sonnet | Diagnosing render failures — reads code + docs, identifies root cause, provides fix |
 
 ---
 
 ## Orchestration Playbook
 
-These are the standard workflows. The orchestrator (main Claude Code agent) coordinates subagents — it does NOT write Remotion code itself without first dispatching the appropriate subagent.
-
 ### Build a New Composition
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│ User: "Build me a video that does X"                    │
-└─────────────┬───────────────────────────┬───────────────┘
-              │ PARALLEL                  │
-              ▼                           ▼
-┌──────────────────────┐   ┌──────────────────────────────┐
-│ 1. API Researcher    │   │ 2. Composition Architect     │
-│ (look up needed APIs)│   │ (design scene graph + props) │
-└──────────┬───────────┘   └──────────────┬───────────────┘
-           │                              │
-           └──────────┬───────────────────┘
-                      ▼
-        ┌──────────────────────────┐
-        │ 3. Animation Designer    │
-        │ (if complex motion)      │
-        │ + Media Agent            │
-        │ (if fonts/audio/images)  │
-        └──────────┬───────────────┘
-                   ▼
-        ┌──────────────────────────┐
-        │ 4. Orchestrator writes   │
-        │ component + Root.tsx     │
-        └──────────┬───────────────┘
-                   ▼
-        ┌──────────────────────────┐
-        │ 5. Render Agent (bg)     │
-        │ → still for preview      │
-        │ → full video when ready  │
-        └──────────────────────────┘
+User request
+  ├── composition-designer (researches, designs, writes complete code)
+  ├── Orchestrator registers in Root.tsx
+  └── Orchestrator renders still via background Bash
 ```
 
 ### Multi-Composition Project
 
-Spawn one **Composition Architect** per composition in parallel. Then spawn one **Render Agent** per composition in parallel (all in background). The main agent writes all components and registers them in Root.tsx between those phases.
+Spawn one **composition-designer** per composition in parallel. Register all in Root.tsx. Render stills sequentially (one at a time).
 
-### Quick Iteration Loop
+### Quick Iteration
 
 ```
-User feedback → Edit code directly → Render Agent (still, background) → Show preview → Repeat
+User feedback → Edit code directly → Bash render still (background) → Show preview → Repeat
 ```
-
-Skip the researcher/architect for small tweaks. Only re-engage them if the change involves unfamiliar APIs.
 
 ### Debug a Broken Render
 
 ```
-Render fails → Render Debugger (reads code + searches docs) → Fix applied → Render Agent (retry)
+Render fails → render-debugger (reads code + searches docs) → Fix applied → Bash render (retry)
 ```
 
 ### Orchestration Rules
 
-1. **Research before code** — Always spawn the API Researcher before writing non-trivial Remotion code. Never guess at import paths, prop names, or API signatures.
-2. **Renders are background-only** — Every Render Agent call MUST use `run_in_background: true`.
-3. **Parallelize independent agents** — Spawn API Researcher + Composition Architect together. Spawn multiple Render Agents together for multi-comp projects.
-4. **One render per agent** — Remotion saturates system resources per render. Don't combine two render commands in one Bash agent.
-5. **Version lock** — All `@remotion/*` packages must be `4.0.399`. Never install mismatched versions.
-6. **Sequential composition registration** — Write the component file BEFORE adding its `<Composition>` to Root.tsx (the import must resolve).
-7. **Still before full render** — For iteration, render a still at a key frame first. Only render the full video when the user is satisfied.
-8. **Package check** — Before writing code that uses `@remotion/transitions`, `@remotion/shapes`, `@remotion/paths`, `@remotion/noise`, `@remotion/google-fonts`, or `@remotion/layout-utils`, check if they're installed. If not, spawn the Package Installer first.
+1. **Research before code** — Dispatch `composition-designer` for non-trivial Remotion work.
+2. **Renders run in background** — Use `Bash(run_in_background: true)` for all renders.
+3. **One render at a time** — Remotion saturates system resources per render.
+4. **Version lock** — All `@remotion/*` packages must be `4.0.399`.
+5. **Sequential registration** — Write the component file BEFORE adding its `<Composition>` to Root.tsx.
+6. **Still before full render** — Render a still at a key frame first. Full video only when the user is satisfied.
+7. **Package check** — Verify `package.json` before using optional `@remotion/*` packages.
 
 ---
 

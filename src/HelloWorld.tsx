@@ -15,7 +15,7 @@ export const HelloWorld: React.FC<Props> = ({titleText, titleColor}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
 
-  const opacity = interpolate(frame, [0, 30], [0, 1], {
+  const opacity = interpolate(frame, [0, 1 * fps], [0, 1], {
     extrapolateRight: 'clamp',
   });
 
