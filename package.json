@@ -1,0 +1,24 @@
+{
+  "name": "remotion-project",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bunx remotion studio src/index.ts",
+    "render": "bunx remotion render src/index.ts HelloWorld out/video.mp4",
+    "render:still": "bunx remotion still src/index.ts HelloWorld out/still.png",
+    "render:programmatic": "bun render.mjs"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "remotion": "4.0.399",
+    "@remotion/cli": "4.0.399",
+    "@remotion/bundler": "4.0.399",
+    "@remotion/renderer": "4.0.399"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "typescript": "^5.7.0"
+  }
+}
